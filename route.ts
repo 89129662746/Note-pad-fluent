@@ -1,26 +1,45 @@
 /**
- * GET /api/products
+ * GET /api/order/[id]
  *
- * Возвращает все активные продукты для отображения на витрине.
+ * Возвращает статус заказа и лицензионный ключ (если оплачен).
+ * Используется для polling статуса после возврата с YooKassa.
+ *
+ * Пример: GET /api/order/abc123 →
+ *   { id, orderNumber, status, amount, currency, product: {...}, licenseKey?, paidAt? }
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-export async function GET() {
-  const products = await db.product.findMany({
-    where: { active: true },
-    orderBy: { order: 'asc' },
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  const order = await db.order.findUnique({
+    where: { id },
+    include: { product: true },
   });
 
-  return NextResponse.json(
-    products.map((p) => ({
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      description: p.description,
-      priceRub: p.priceRub,
-      oldPriceRub: p.oldPriceRub,
-      durationDays: p.durationDays,
-    })),
-  );
+  if (!order) {
+    return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    id: order.id,
+    orderNumber: order.orderNumber,
+    email: order.email,
+    status: order.status,
+    amountKopeck: order.amountKopeck,
+    currency: order.currency,
+    product: {
+      code: order.product.code,
+      name: order.product.name,
+      description: order.product.description,
+      durationDays: order.product.durationDays,
+    },
+    licenseKey: order.licenseKey,
+    paidAt: order.paidAt,
+    createdAt: order.createdAt,
+  });
 }
