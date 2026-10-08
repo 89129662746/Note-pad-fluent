@@ -1,0 +1,110 @@
+// Prisma schema for NotepadFluent shop + YooKassa integration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Продукт магазина (Free / Pro / Teams и т.д.)
+model Product {
+  id          String   @id @default(cuid())
+  code        String   @unique           // "pro", "teams", "lifetime"
+  name        String                      // "NotepadFluent Pro"
+  description String
+  /// Цена в рублях (целое число копеек хранится отдельно, см. priceKopeck)
+  priceRub    Int
+  /// Старая цена для отображения зачёркнутой
+  oldPriceRub Int?
+  /// Срок действия лицензии в днях (null = бессрочно)
+  durationDays Int?
+  /// Активные продажи
+  active      Boolean  @default(true)
+  /// Сортировка на витрине
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders Order[]
+}
+
+/// Заказ пользователя
+model Order {
+  id            String   @id @default(cuid())
+  /// Внутренний человекочитаемый номер: NF-2026-000123
+  orderNumber   String   @unique
+  /// Email покупателя (для доставки лицензии)
+  email         String
+  /// Имя (опционально)
+  name          String?
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  /// Сумма в копейках (1 рубль = 100 копеек)
+  amountKopeck  Int
+  /// Валюта по ISO 4217
+  currency      String   @default("RUB")
+  /// Статус заказа
+  status        OrderStatus @default(pending)
+  /// ID платежа в YooKassa
+  yookassaPaymentId String?
+  /// URL платёжной страницы YooKassa
+  confirmationUrl   String?
+  /// Способ оплаты (card / sbp / yoomoney)
+  paymentMethod     String?
+  /// Лицензионный ключ, который получит покупатель
+  licenseKey        String?
+  /// IP покупателя (для защиты от фрода)
+  clientIp          String?
+  /// User-Agent
+  userAgent         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  paidAt            DateTime?
+  /// События webhook по этому заказу
+  events            WebhookEvent[]
+
+  @@index([email])
+  @@index([status])
+  @@index([yookassaPaymentId])
+}
+
+/// Журнал webhook-событий от YooKassa (для аудита и идемпотентности)
+model WebhookEvent {
+  id             String   @id @default(cuid())
+  /// event из тела webhook: payment.waiting_for_capture / payment.succeeded / payment.canceled
+  event          String
+  /// ID платежа в YooKassa
+  paymentId      String
+  /// ID заказа (опционально, если известен)
+  orderId        String?
+  order          Order?   @relation(fields: [orderId], references: [id])
+  /// Тело запроса (raw JSON)
+  rawPayload      String
+  /// Подпись из HTTP-заголовка (для проверки подлинности)
+  signature       String?
+  /// Был ли уже обработан (для идемпотентности)
+  processed       Boolean  @default(false)
+  receivedAt     DateTime @default(now())
+  processedAt    DateTime?
+
+  @@index([paymentId])
+  @@index([event])
+}
+
+enum OrderStatus {
+  /// Создан, ждёт перехода на оплату
+  pending
+  /// Пользователь перешёл на платёжную страницу YooKassa
+  waiting_for_payment
+  /// Оплачен, лицензия выдана
+  succeeded
+  /// Отменён пользователем или таймаут
+  canceled
+  /// Возврат
+  refunded
+  /// Ошибка обработки
+  error
+}
