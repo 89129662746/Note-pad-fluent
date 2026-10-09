@@ -1,12 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "bun run build",
+  "buildCommand": "prisma generate && bun run build",
   "installCommand": "bun install",
   "devCommand": "bun run dev",
   "regions": ["fra1"],
   "env": {
-    "NEXT_PUBLIC_APP_URL": "https://notepadfluent.vercel.app"
+    "NEXT_PUBLIC_APP_URL": "https://note-pad-fluent.vercel.app"
   },
   "functions": {
     "src/app/api/yookassa/webhook/route.ts": {
